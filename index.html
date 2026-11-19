@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kassenbuch">
+<meta name="theme-color" content="#2e7d4f">
+<title>Kassenbuch</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #f4f5f3; color: #1f2420; padding: 20px 16px 40px; }
+  h1 { font-size: 20px; margin: 4px 0 20px; text-align: center; }
+  form { max-width: 420px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #4b544d; margin-bottom: 6px; }
+  input, select { width: 100%; font-size: 17px; padding: 12px 14px; border: 1px solid #d4d8d2;
+                  border-radius: 10px; background: #fff; -webkit-appearance: none; appearance: none; color: inherit; }
+  input:focus, select:focus { outline: none; border-color: #4a7c59; }
+  .toggle { display: flex; border: 1px solid #d4d8d2; border-radius: 10px; overflow: hidden; background: #fff; }
+  .toggle input { display: none; }
+  .toggle label { flex: 1; text-align: center; margin: 0; padding: 13px 0; font-size: 16px; cursor: pointer; color: #4b544d; }
+  #typ_ein:checked ~ label[for="typ_ein"] { background: #2e7d4f; color: #fff; }
+  #typ_aus:checked ~ label[for="typ_aus"] { background: #b3412e; color: #fff; }
+  button { font-size: 17px; font-weight: 600; padding: 15px; border: 0; border-radius: 10px;
+           background: #1f2420; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  #status { max-width: 420px; margin: 16px auto 0; text-align: center; font-weight: 600; min-height: 1.4em; }
+  #status.ok { color: #2e7d4f; }
+  #status.err { color: #b3412e; }
+</style>
+</head>
+<body>
+  <h1>Bar-Kassenbuch</h1>
+  <form id="entryForm">
+    <div class="toggle">
+      <input type="radio" name="typ" id="typ_ein" value="Einnahme" checked>
+      <input type="radio" name="typ" id="typ_aus" value="Ausgabe">
+      <label for="typ_ein">Einnahme</label>
+      <label for="typ_aus">Ausgabe</label>
+    </div>
+    <div>
+      <label for="datum">Datum</label>
+      <input type="date" id="datum" name="datum" required>
+    </div>
+    <div>
+      <label for="betrag">Betrag (€)</label>
+      <input type="text" id="betrag" name="betrag" inputmode="decimal" placeholder="0,00" required>
+    </div>
+    <div>
+      <label for="verwendungszweck">Verwendungszweck</label>
+      <input type="text" id="verwendungszweck" name="verwendungszweck" placeholder="z.B. Eierverkauf Wochenmarkt">
+    </div>
+    <div>
+      <label for="kategorie">Kategorie</label>
+      <select id="kategorie" name="kategorie" required>
+        <option value="Löhne">Löhne</option>
+        <option value="Eier" selected>Eier</option>
+        <option value="Sonstiges">Sonstiges</option>
+      </select>
+    </div>
+    <div>
+      <label for="bereich">Bereich</label>
+      <select id="bereich" name="bereich" required>
+        <option value="Hühnerhof" selected>Hühnerhof</option>
+        <option value="Landwirtschaft">Landwirtschaft</option>
+        <option value="Gewerbe">Gewerbe</option>
+      </select>
+    </div>
+    <button type="submit" id="submitBtn">Buchen</button>
+  </form>
+  <div id="status"></div>
+<script>
+  // Bar-Kassenbuch: schreibt über die Apps-Script-App im Konto andreas@hofladen-kratzer.de
+  // in die Datei "Bar-Kassenbuch", Reiter "Buchungen". Keine Google-Anmeldung nötig.
+  const ZIEL = 'https://script.google.com/macros/s/AKfycbz1YKY4GLW9ERzrEPUk8mmleu12FpmB1bvTo982VZ9sWeHZ_foKtop8x8ak6gFaV7e0/exec';
+  const form = document.getElementById('entryForm');
+  const statusEl = document.getElementById('status');
+  const submitBtn = document.getElementById('submitBtn');
+
+  function heute() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  form.datum.value = heute();
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const betrag = form.betrag.value.trim().replace(',', '.');
+    if (!(parseFloat(betrag) > 0)) {
+      statusEl.textContent = 'Bitte einen Betrag größer 0 eingeben.';
+      statusEl.className = 'err';
+      return;
+    }
+    submitBtn.disabled = true;
+    statusEl.textContent = 'Wird gespeichert…';
+    statusEl.className = '';
+
+    const entry = {
+      typ: form.typ.value,
+      datum: form.datum.value,
+      betrag: betrag,
+      verwendungszweck: form.verwendungszweck.value,
+      kategorie: form.kategorie.value,
+      bereich: form.bereich.value
+    };
+
+    fetch(ZIEL, {
+      method: 'POST',
+      body: JSON.stringify(entry),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      credentials: 'omit'
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.error || 'unbekannter Fehler');
+        statusEl.textContent = '✓ Gebucht: ' + entry.typ + ' ' + form.betrag.value + ' €';
+        statusEl.className = 'ok';
+        const behaltenDatum = form.datum.value;
+        const behaltenBereich = form.bereich.value;
+        form.reset();
+        form.datum.value = behaltenDatum;
+        form.bereich.value = behaltenBereich;
+        document.getElementById('typ_ein').checked = true;
+        submitBtn.disabled = false;
+      })
+      .catch(function (err) {
+        statusEl.textContent = 'Fehler: ' + (err && err.message ? err.message : err) + ' – nichts gespeichert, bitte nochmal versuchen.';
+        statusEl.className = 'err';
+        submitBtn.disabled = false;
+      });
+  });
+</script>
+</body>
+</html>
